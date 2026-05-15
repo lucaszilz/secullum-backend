@@ -1,6 +1,8 @@
 require("dotenv").config();
+
 const express = require("express");
 const axios = require("axios");
+const cors = require("cors");
 
 let secullumToken = null;
 
@@ -45,9 +47,10 @@ function obterDataOntem() {
 
 const app = express();
 
-const marcacoesRoutes = require("./routes/marcacoes");
-
+app.use(cors());
 app.use(express.json());
+
+const marcacoesRoutes = require("./routes/marcacoes");
 
 app.get("/", (req, res) => {
   res.send("Backend Secullum rodando 🚀");
@@ -73,7 +76,7 @@ app.get("/funcionarios", async (req, res) => {
         estrutura: f.Estrutura?.Descricao || null,
         admissao: f.Admissao,
         nascimento: f.Nascimento
-}));
+      }));
 
     res.json(funcionarios);
 
@@ -153,8 +156,8 @@ app.get("/banco-horas-equipe", async (req, res) => {
         const totais = calcularResponse.data.Totais;
 
         const indiceBSaldo = colunas.indexOf("BSaldo");
-        
-                resultado.push({
+
+        resultado.push({
           numeroFolha: funcionario.numeroFolha,
           nome: funcionario.nome,
           estrutura: funcionario.estrutura,
@@ -169,54 +172,56 @@ app.get("/banco-horas-equipe", async (req, res) => {
         });
       }
     }
-resultado.sort((a, b) => {
-  const converterMinutos = (saldo) => {
-    if (!saldo) return 0;
 
-    const negativo = saldo.startsWith("-");
-    const valorLimpo = saldo.replace("-", "");
+    resultado.sort((a, b) => {
+      const converterMinutos = (saldo) => {
+        if (!saldo) return 0;
 
-    const [horas, minutos] = valorLimpo.split(":").map(Number);
+        const negativo = saldo.startsWith("-");
+        const valorLimpo = saldo.replace("-", "");
 
-    let total = (horas * 60) + minutos;
+        const [horas, minutos] = valorLimpo.split(":").map(Number);
 
-    if (negativo) {
-      total = total * -1;
-    }
+        let total = (horas * 60) + minutos;
 
-    return total;
-  };
+        if (negativo) {
+          total = total * -1;
+        }
 
-  return converterMinutos(b.saldoBancoHoras) - converterMinutos(a.saldoBancoHoras);
-});
-const positivos = resultado.filter(f => {
-  return f.saldoBancoHoras && !f.saldoBancoHoras.startsWith("-");
-});
+        return total;
+      };
 
-const negativos = resultado.filter(f => {
-  return f.saldoBancoHoras && f.saldoBancoHoras.startsWith("-");
-});
+      return converterMinutos(b.saldoBancoHoras) - converterMinutos(a.saldoBancoHoras);
+    });
 
-const zerados = resultado.filter(f => {
-  return f.saldoBancoHoras === "00:00";
-});
+    const positivos = resultado.filter(f => {
+      return f.saldoBancoHoras && !f.saldoBancoHoras.startsWith("-");
+    });
 
-const resumo = {
-  totalFuncionarios: resultado.length,
-  saldoPositivo: positivos.length,
-  saldoNegativo: negativos.length,
-  saldoZerado: zerados.length,
-  maiorSaldo: resultado[0]?.saldoBancoHoras || "00:00",
-  menorSaldo: resultado[resultado.length - 1]?.saldoBancoHoras || "00:00"
-};
+    const negativos = resultado.filter(f => {
+      return f.saldoBancoHoras && f.saldoBancoHoras.startsWith("-");
+    });
+
+    const zerados = resultado.filter(f => {
+      return f.saldoBancoHoras === "00:00";
+    });
+
+    const resumo = {
+      totalFuncionarios: resultado.length,
+      saldoPositivo: positivos.length,
+      saldoNegativo: negativos.length,
+      saldoZerado: zerados.length,
+      maiorSaldo: resultado[0]?.saldoBancoHoras || "00:00",
+      menorSaldo: resultado[resultado.length - 1]?.saldoBancoHoras || "00:00"
+    };
 
     res.json({
-  estrutura,
-  dataInicio,
-  dataFim: dataReferencia,
-  resumo,
-  funcionarios: resultado
-});
+      estrutura,
+      dataInicio,
+      dataFim: dataReferencia,
+      resumo,
+      funcionarios: resultado
+    });
 
   } catch (error) {
     console.log(error.response?.data || error.message);
@@ -226,8 +231,6 @@ const resumo = {
     });
   }
 });
-
-
 
 app.listen(3001, () => {
   console.log("Servidor rodando na porta 3001");
