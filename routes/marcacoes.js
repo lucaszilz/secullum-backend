@@ -68,14 +68,14 @@ router.get("/", async (req, res) => {
         numeroFolha: item.Funcionario?.NumeroFolha || numeroFolha,
         data: item.Data?.split("T")[0],
 
-        entrada1: item.Entrada1 || item.MemoriaEntrada1 || "",
-        saida1: item.Saida1 || item.MemoriaSaida1 || "",
+        entrada1: item.Entrada1 || "",
+        saida1: item.Saida1 || "",
 
-        entrada2: item.Entrada2 || item.MemoriaEntrada2 || "",
-        saida2: item.Saida2 || item.MemoriaSaida2 || "",
+        entrada2: item.Entrada2 || "",
+        saida2: item.Saida2 || "",
 
-        entrada3: item.Entrada3 || item.MemoriaEntrada3 || "",
-        saida3: item.Saida3 || item.MemoriaSaida3 || "",
+        entrada3: item.Entrada3 || "",
+        saida3: item.Saida3 || "",
 
         observacoes: item.Observacoes || ""
       };
