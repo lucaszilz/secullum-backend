@@ -6,6 +6,8 @@ const cors = require("cors");
 
 let secullumToken = null;
 
+const cacheBancoHorasEquipe = {};
+
 async function gerarTokenSecullum() {
   const params = new URLSearchParams();
 
@@ -94,6 +96,7 @@ app.get("/banco-horas-equipe", async (req, res) => {
   try {
     const { estrutura, dataInicio } = req.query;
     const dataReferencia = obterDataOntem();
+    const chaveCache = `${estrutura}-${dataInicio}-${dataReferencia}`;
 
     if (!estrutura || !dataInicio) {
       return res.status(400).json({
@@ -101,6 +104,14 @@ app.get("/banco-horas-equipe", async (req, res) => {
       });
     }
 
+    if (cacheBancoHorasEquipe[chaveCache]) {
+    console.log("Retornando banco de horas do CACHE");
+
+    return res.json({
+      ...cacheBancoHorasEquipe[chaveCache],
+      origem: "cache"
+  });
+}
     const funcionariosResponse = await axios.get(
       process.env.SECULLUM_FUNCIONARIOS_URL,
       {
@@ -215,13 +226,20 @@ app.get("/banco-horas-equipe", async (req, res) => {
       menorSaldo: resultado[resultado.length - 1]?.saldoBancoHoras || "00:00"
     };
 
-    res.json({
-      estrutura,
-      dataInicio,
-      dataFim: dataReferencia,
-      resumo,
-      funcionarios: resultado
-    });
+   const resposta = {
+  estrutura,
+  dataInicio,
+  dataFim: dataReferencia,
+  origem: "secullum",
+  resumo,
+  funcionarios: resultado
+};
+
+cacheBancoHorasEquipe[chaveCache] = resposta;
+
+console.log("Banco de horas salvo no CACHE");
+
+res.json(resposta);
 
   } catch (error) {
     console.log(error.response?.data || error.message);
