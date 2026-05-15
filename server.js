@@ -47,6 +47,21 @@ function obterDataOntem() {
   return hoje.toISOString().split("T")[0];
 }
 
+function normalizarTexto(texto) {
+  return String(texto || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+function limparTexto(texto) {
+  return String(texto || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 const app = express();
 
 app.use(cors());
@@ -73,9 +88,9 @@ app.get("/funcionarios", async (req, res) => {
       .filter(f => !f.Demissao)
       .map(f => ({
         numeroFolha: f.NumeroFolha,
-        nome: f.Nome,
+        nome: limparTexto(f.Nome),
         cpf: f.Cpf,
-        estrutura: f.Estrutura?.Descricao || null,
+        estrutura: limparTexto(f.Estrutura?.Descricao) || null,
         admissao: f.Admissao,
         nascimento: f.Nascimento
       }));
@@ -83,7 +98,6 @@ app.get("/funcionarios", async (req, res) => {
     res.json(funcionarios);
 
   } catch (error) {
-
     console.log(error.response?.data || error.message);
 
     res.status(500).json({
@@ -96,7 +110,9 @@ app.get("/banco-horas-equipe", async (req, res) => {
   try {
     const { estrutura, dataInicio } = req.query;
     const dataReferencia = obterDataOntem();
-    const chaveCache = `${estrutura}-${dataInicio}-${dataReferencia}`;
+    const estruturaNormalizada = normalizarTexto(estrutura);
+    const estruturaLimpa = limparTexto(estrutura);
+    const chaveCache = `${estruturaNormalizada}-${dataInicio}-${dataReferencia}`;
 
     if (!estrutura || !dataInicio) {
       return res.status(400).json({
@@ -105,13 +121,14 @@ app.get("/banco-horas-equipe", async (req, res) => {
     }
 
     if (cacheBancoHorasEquipe[chaveCache]) {
-    console.log("Retornando banco de horas do CACHE");
+      console.log("Retornando banco de horas do CACHE");
 
-    return res.json({
-      ...cacheBancoHorasEquipe[chaveCache],
-      origem: "cache"
-  });
-}
+      return res.json({
+        ...cacheBancoHorasEquipe[chaveCache],
+        origem: "cache"
+      });
+    }
+
     const funcionariosResponse = await axios.get(
       process.env.SECULLUM_FUNCIONARIOS_URL,
       {
@@ -124,12 +141,12 @@ app.get("/banco-horas-equipe", async (req, res) => {
 
     const funcionarios = funcionariosResponse.data
       .filter(f => !f.Demissao)
-      .filter(f => f.Estrutura?.Descricao === estrutura)
+      .filter(f => normalizarTexto(f.Estrutura?.Descricao) === estruturaNormalizada)
       .map(f => ({
         numeroFolha: f.NumeroFolha,
-        nome: f.Nome,
+        nome: limparTexto(f.Nome),
         cpf: f.Cpf,
-        estrutura: f.Estrutura?.Descricao || null
+        estrutura: limparTexto(f.Estrutura?.Descricao) || null
       }));
 
     const resultado = [];
@@ -226,20 +243,20 @@ app.get("/banco-horas-equipe", async (req, res) => {
       menorSaldo: resultado[resultado.length - 1]?.saldoBancoHoras || "00:00"
     };
 
-   const resposta = {
-  estrutura,
-  dataInicio,
-  dataFim: dataReferencia,
-  origem: "secullum",
-  resumo,
-  funcionarios: resultado
-};
+    const resposta = {
+      estrutura: estruturaLimpa,
+      dataInicio,
+      dataFim: dataReferencia,
+      origem: "secullum",
+      resumo,
+      funcionarios: resultado
+    };
 
-cacheBancoHorasEquipe[chaveCache] = resposta;
+    cacheBancoHorasEquipe[chaveCache] = resposta;
 
-console.log("Banco de horas salvo no CACHE");
+    console.log("Banco de horas salvo no CACHE");
 
-res.json(resposta);
+    res.json(resposta);
 
   } catch (error) {
     console.log(error.response?.data || error.message);
