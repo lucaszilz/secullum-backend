@@ -289,14 +289,11 @@ app.delete("/usuarios/:id", async (req, res) => {
 app.patch("/usuarios/:id/senha", async (req, res) => {
   try {
     const { id } = req.params;
-    const { senha } = req.body;
-
-    const novaSenha = senha || "ottimizza123";
 
     const { data, error } = await supabase
       .from("users")
       .update({
-        senha: novaSenha,
+        senha: "ottimizza123",
         alterar_senha: true
       })
       .eq("id", id)
@@ -317,6 +314,54 @@ app.patch("/usuarios/:id/senha", async (req, res) => {
 
     res.status(500).json({
       erro: "Erro ao redefinir senha"
+    });
+  }
+});
+
+app.patch("/usuarios/:id/trocar-senha", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { senha } = req.body;
+
+    if (!senha) {
+      return res.status(400).json({
+        erro: "Informe a nova senha"
+      });
+    }
+
+    const { data, error } = await supabase
+      .from("users")
+      .update({
+        senha: senha,
+        alterar_senha: false
+      })
+      .eq("id", id)
+      .select("id, nome, login, tipo, estrutura, alterar_senha")
+      .single();
+
+    if (error) {
+      return res.status(500).json({
+        erro: "Erro ao trocar senha",
+        detalhe: error.message
+      });
+    }
+
+    res.json({
+      usuario: {
+        id: data.id,
+        nome: data.nome,
+        login: data.login,
+        tipo: data.tipo,
+        estrutura: data.estrutura,
+        alterarSenha: data.alterar_senha
+      }
+    });
+
+  } catch (error) {
+    console.log(error.message);
+
+    res.status(500).json({
+      erro: "Erro ao trocar senha"
     });
   }
 });
