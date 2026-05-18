@@ -97,10 +97,14 @@ app.post("/login", async (req, res) => {
       .single();
 
     if (error || !data) {
-      return res.status(401).json({
-        erro: "Login ou senha inválidos"
-      });
-    }
+    console.log("ERRO SUPABASE LOGIN:", error);
+    console.log("DADOS RECEBIDOS:", { login, senha });
+
+    return res.status(401).json({
+    erro: "Login ou senha inválidos",
+    detalhe: error?.message || null
+  });
+}
 
     return res.json({
       usuario: {
