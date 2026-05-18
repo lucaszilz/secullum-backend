@@ -223,7 +223,11 @@ app.get("/banco-horas-equipe", async (req, res) => {
     });
 
     const positivos = resultado.filter(f => {
-      return f.saldoBancoHoras && !f.saldoBancoHoras.startsWith("-");
+      return (
+        f.saldoBancoHoras &&
+        !f.saldoBancoHoras.startsWith("-") &&
+        f.saldoBancoHoras !== "00:00"
+      );
     });
 
     const negativos = resultado.filter(f => {
@@ -231,16 +235,19 @@ app.get("/banco-horas-equipe", async (req, res) => {
     });
 
     const zerados = resultado.filter(f => {
-      return f.saldoBancoHoras === "00:00";
+      return !f.saldoBancoHoras || f.saldoBancoHoras === "00:00";
     });
+
+    const maiorSaldo = positivos[0];
+    const menorSaldo = negativos[negativos.length - 1];
 
     const resumo = {
       totalFuncionarios: resultado.length,
       saldoPositivo: positivos.length,
       saldoNegativo: negativos.length,
       saldoZerado: zerados.length,
-      maiorSaldo: resultado[0]?.saldoBancoHoras || "00:00",
-      menorSaldo: resultado[resultado.length - 1]?.saldoBancoHoras || "00:00"
+      maiorSaldo: maiorSaldo?.saldoBancoHoras || "00:00",
+      menorSaldo: menorSaldo?.saldoBancoHoras || "00:00"
     };
 
     const resposta = {
