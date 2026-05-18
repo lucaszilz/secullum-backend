@@ -94,7 +94,8 @@ app.post("/login", async (req, res) => {
       .select("id, nome, login, tipo, estrutura, alterar_senha")
       .eq("login", login)
       .eq("senha", senha)
-      .single();
+      .limit(1)
+      .maybeSingle();
 
     if (error || !data) {
     console.log("ERRO SUPABASE LOGIN:", error);
