@@ -90,7 +90,7 @@ app.post("/login", async (req, res) => {
     }
 
     const { data, error } = await supabase
-      .from("Usuários")
+      .from("users")
       .select("id, nome, login, tipo, estrutura, alterar_senha")
       .eq("login", login)
       .eq("senha", senha)
