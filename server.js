@@ -3,8 +3,14 @@ require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
+const { createClient } = require("@supabase/supabase-js");
 
 let secullumToken = null;
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
 
 const cacheBancoHorasEquipe = {};
 
@@ -71,6 +77,49 @@ const marcacoesRoutes = require("./routes/marcacoes");
 
 app.get("/", (req, res) => {
   res.send("Backend Secullum rodando 🚀");
+});
+
+app.post("/login", async (req, res) => {
+  try {
+    const { login, senha } = req.body;
+
+    if (!login || !senha) {
+      return res.status(400).json({
+        erro: "Informe login e senha"
+      });
+    }
+
+    const { data, error } = await supabase
+      .from("users")
+      .select("id, nome, login, tipo, estrutura, alterar_senha")
+      .eq("login", login)
+      .eq("senha", senha)
+      .single();
+
+    if (error || !data) {
+      return res.status(401).json({
+        erro: "Login ou senha inválidos"
+      });
+    }
+
+    return res.json({
+      usuario: {
+        id: data.id,
+        nome: data.nome,
+        login: data.login,
+        tipo: data.tipo,
+        estrutura: data.estrutura,
+        alterarSenha: data.alterar_senha
+      }
+    });
+
+  } catch (error) {
+    console.log(error.message);
+
+    return res.status(500).json({
+      erro: "Erro ao realizar login"
+    });
+  }
 });
 
 app.use("/marcacoes", marcacoesRoutes);
