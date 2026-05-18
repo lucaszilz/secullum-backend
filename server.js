@@ -127,6 +127,31 @@ app.post("/login", async (req, res) => {
   }
 });
 
+app.get("/usuarios", async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("id, nome, login, tipo, estrutura, alterar_senha")
+      .order("id", { ascending: true });
+
+    if (error) {
+      return res.status(500).json({
+        erro: "Erro ao buscar usuários",
+        detalhe: error.message
+      });
+    }
+
+    res.json(data);
+
+  } catch (error) {
+    console.log(error.message);
+
+    res.status(500).json({
+      erro: "Erro ao buscar usuários"
+    });
+  }
+});
+
 app.use("/marcacoes", marcacoesRoutes);
 
 app.get("/funcionarios", async (req, res) => {
