@@ -33,7 +33,6 @@ async function gerarTokenSecullum() {
   );
 
   secullumToken = response.data.access_token;
-
   console.log("Token Secullum gerado automaticamente");
 
   return secullumToken;
@@ -98,14 +97,10 @@ app.post("/login", async (req, res) => {
       .maybeSingle();
 
     if (error || !data) {
-    console.log("ERRO SUPABASE LOGIN:", error);
-    console.log("DADOS RECEBIDOS:", { login, senha });
-
-    return res.status(401).json({
-    erro: "Login ou senha inválidos",
-    detalhe: error?.message || null
-  });
-}
+      return res.status(401).json({
+        erro: "Login ou senha inválidos"
+      });
+    }
 
     return res.json({
       usuario: {
@@ -148,6 +143,180 @@ app.get("/usuarios", async (req, res) => {
 
     res.status(500).json({
       erro: "Erro ao buscar usuários"
+    });
+  }
+});
+
+app.post("/usuarios", async (req, res) => {
+  try {
+    const { nome, login, tipo, estrutura } = req.body;
+
+    if (!nome || !login || !tipo || !estrutura) {
+      return res.status(400).json({
+        erro: "Informe nome, login, tipo e estrutura"
+      });
+    }
+
+    const { data: existente } = await supabase
+      .from("users")
+      .select("id")
+      .eq("login", login)
+      .maybeSingle();
+
+    if (existente) {
+      return res.status(409).json({
+        erro: "Já existe um usuário com este login"
+      });
+    }
+
+    const { data: ultimoUsuario } = await supabase
+      .from("users")
+      .select("id")
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const novoId = (ultimoUsuario?.id || 0) + 1;
+
+    const { data, error } = await supabase
+      .from("users")
+      .insert({
+        id: novoId,
+        nome: limparTexto(nome),
+        login: limparTexto(login).toLowerCase(),
+        senha: "ottimizza123",
+        tipo: limparTexto(tipo).toLowerCase(),
+        estrutura: limparTexto(estrutura),
+        alterar_senha: true
+      })
+      .select("id, nome, login, tipo, estrutura, alterar_senha")
+      .single();
+
+    if (error) {
+      return res.status(500).json({
+        erro: "Erro ao criar usuário",
+        detalhe: error.message
+      });
+    }
+
+    res.status(201).json(data);
+
+  } catch (error) {
+    console.log(error.message);
+
+    res.status(500).json({
+      erro: "Erro ao criar usuário"
+    });
+  }
+});
+
+app.put("/usuarios/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nome, login, tipo, estrutura } = req.body;
+
+    if (!nome || !login || !tipo || !estrutura) {
+      return res.status(400).json({
+        erro: "Informe nome, login, tipo e estrutura"
+      });
+    }
+
+    const { data, error } = await supabase
+      .from("users")
+      .update({
+        nome: limparTexto(nome),
+        login: limparTexto(login).toLowerCase(),
+        tipo: limparTexto(tipo).toLowerCase(),
+        estrutura: limparTexto(estrutura)
+      })
+      .eq("id", id)
+      .select("id, nome, login, tipo, estrutura, alterar_senha")
+      .single();
+
+    if (error) {
+      return res.status(500).json({
+        erro: "Erro ao editar usuário",
+        detalhe: error.message
+      });
+    }
+
+    res.json(data);
+
+  } catch (error) {
+    console.log(error.message);
+
+    res.status(500).json({
+      erro: "Erro ao editar usuário"
+    });
+  }
+});
+
+app.delete("/usuarios/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (Number(id) === 1) {
+      return res.status(403).json({
+        erro: "Não é permitido excluir o usuário administrador principal"
+      });
+    }
+
+    const { error } = await supabase
+      .from("users")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      return res.status(500).json({
+        erro: "Erro ao excluir usuário",
+        detalhe: error.message
+      });
+    }
+
+    res.json({
+      mensagem: "Usuário excluído com sucesso"
+    });
+
+  } catch (error) {
+    console.log(error.message);
+
+    res.status(500).json({
+      erro: "Erro ao excluir usuário"
+    });
+  }
+});
+
+app.patch("/usuarios/:id/senha", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { senha } = req.body;
+
+    const novaSenha = senha || "ottimizza123";
+
+    const { data, error } = await supabase
+      .from("users")
+      .update({
+        senha: novaSenha,
+        alterar_senha: true
+      })
+      .eq("id", id)
+      .select("id, nome, login, tipo, estrutura, alterar_senha")
+      .single();
+
+    if (error) {
+      return res.status(500).json({
+        erro: "Erro ao redefinir senha",
+        detalhe: error.message
+      });
+    }
+
+    res.json(data);
+
+  } catch (error) {
+    console.log(error.message);
+
+    res.status(500).json({
+      erro: "Erro ao redefinir senha"
     });
   }
 });
@@ -261,7 +430,6 @@ app.get("/banco-horas-equipe", async (req, res) => {
 
         const colunas = calcularResponse.data.Colunas;
         const totais = calcularResponse.data.Totais;
-
         const indiceBSaldo = colunas.indexOf("BSaldo");
 
         resultado.push({
@@ -286,7 +454,6 @@ app.get("/banco-horas-equipe", async (req, res) => {
 
         const negativo = saldo.startsWith("-");
         const valorLimpo = saldo.replace("-", "");
-
         const [horas, minutos] = valorLimpo.split(":").map(Number);
 
         let total = (horas * 60) + minutos;
