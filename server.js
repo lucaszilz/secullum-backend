@@ -46,6 +46,10 @@ async function obterTokenSecullum() {
   return secullumToken;
 }
 
+function hojeISO() {
+  return new Date().toISOString().split("T")[0];
+}
+
 function obterDataOntem() {
   const hoje = new Date();
   hoje.setDate(hoje.getDate() - 1);
@@ -401,17 +405,24 @@ app.get("/funcionarios", async (req, res) => {
 
 app.get("/banco-horas-equipe", async (req, res) => {
   try {
-    const { estrutura, dataInicio } = req.query;
-    const dataReferencia = obterDataOntem();
-    const estruturaNormalizada = normalizarTexto(estrutura);
-    const estruturaLimpa = limparTexto(estrutura);
-    const chaveCache = `${estruturaNormalizada}-${dataInicio}-${dataReferencia}`;
+    const { estrutura, dataInicio, dataFim } = req.query;
 
     if (!estrutura || !dataInicio) {
       return res.status(400).json({
         erro: "Informe estrutura e dataInicio"
       });
     }
+
+    const ontem = obterDataOntem();
+    let dataReferencia = dataFim || ontem;
+
+    if (dataReferencia >= hojeISO()) {
+      dataReferencia = ontem;
+    }
+
+    const estruturaNormalizada = normalizarTexto(estrutura);
+    const estruturaLimpa = limparTexto(estrutura);
+    const chaveCache = `${estruturaNormalizada}-${dataInicio}-${dataReferencia}`;
 
     if (cacheBancoHorasEquipe[chaveCache]) {
       console.log("Retornando banco de horas do CACHE");
