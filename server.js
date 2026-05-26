@@ -579,3 +579,17 @@ app.get("/banco-horas-equipe", async (req, res) => {
 app.listen(3001, () => {
   console.log("Servidor rodando na porta 3001");
 });
+
+app.get("/token-secullum", async (req, res) => {
+  try {
+    const token = await obterTokenSecullum();
+
+    res.json({
+      token
+    });
+  } catch (error) {
+    res.status(500).json({
+      erro: error.message
+    });
+  }
+});
