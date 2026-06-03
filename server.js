@@ -46,14 +46,16 @@ async function obterTokenSecullum() {
   return secullumToken;
 }
 
-function hojeISO() {
-  return new Date().toISOString().split("T")[0];
-}
-
 function obterDataOntem() {
   const hoje = new Date();
   hoje.setDate(hoje.getDate() - 1);
   return hoje.toISOString().split("T")[0];
+}
+
+function obterDataMenosDias(dataISO, dias) {
+  const data = new Date(`${dataISO}T00:00:00`);
+  data.setDate(data.getDate() - dias);
+  return data.toISOString().split("T")[0];
 }
 
 function normalizarTexto(texto) {
@@ -87,9 +89,7 @@ app.post("/login", async (req, res) => {
     const { login, senha } = req.body;
 
     if (!login || !senha) {
-      return res.status(400).json({
-        erro: "Informe login e senha"
-      });
+      return res.status(400).json({ erro: "Informe login e senha" });
     }
 
     const { data, error } = await supabase
@@ -101,9 +101,7 @@ app.post("/login", async (req, res) => {
       .maybeSingle();
 
     if (error || !data) {
-      return res.status(401).json({
-        erro: "Login ou senha inválidos"
-      });
+      return res.status(401).json({ erro: "Login ou senha inválidos" });
     }
 
     return res.json({
@@ -119,10 +117,7 @@ app.post("/login", async (req, res) => {
 
   } catch (error) {
     console.log(error.message);
-
-    return res.status(500).json({
-      erro: "Erro ao realizar login"
-    });
+    return res.status(500).json({ erro: "Erro ao realizar login" });
   }
 });
 
@@ -144,10 +139,7 @@ app.get("/usuarios", async (req, res) => {
 
   } catch (error) {
     console.log(error.message);
-
-    res.status(500).json({
-      erro: "Erro ao buscar usuários"
-    });
+    res.status(500).json({ erro: "Erro ao buscar usuários" });
   }
 });
 
@@ -207,10 +199,7 @@ app.post("/usuarios", async (req, res) => {
 
   } catch (error) {
     console.log(error.message);
-
-    res.status(500).json({
-      erro: "Erro ao criar usuário"
-    });
+    res.status(500).json({ erro: "Erro ao criar usuário" });
   }
 });
 
@@ -248,10 +237,7 @@ app.put("/usuarios/:id", async (req, res) => {
 
   } catch (error) {
     console.log(error.message);
-
-    res.status(500).json({
-      erro: "Erro ao editar usuário"
-    });
+    res.status(500).json({ erro: "Erro ao editar usuário" });
   }
 });
 
@@ -277,16 +263,11 @@ app.delete("/usuarios/:id", async (req, res) => {
       });
     }
 
-    res.json({
-      mensagem: "Usuário excluído com sucesso"
-    });
+    res.json({ mensagem: "Usuário excluído com sucesso" });
 
   } catch (error) {
     console.log(error.message);
-
-    res.status(500).json({
-      erro: "Erro ao excluir usuário"
-    });
+    res.status(500).json({ erro: "Erro ao excluir usuário" });
   }
 });
 
@@ -315,10 +296,7 @@ app.patch("/usuarios/:id/senha", async (req, res) => {
 
   } catch (error) {
     console.log(error.message);
-
-    res.status(500).json({
-      erro: "Erro ao redefinir senha"
-    });
+    res.status(500).json({ erro: "Erro ao redefinir senha" });
   }
 });
 
@@ -328,15 +306,13 @@ app.patch("/usuarios/:id/trocar-senha", async (req, res) => {
     const { senha } = req.body;
 
     if (!senha) {
-      return res.status(400).json({
-        erro: "Informe a nova senha"
-      });
+      return res.status(400).json({ erro: "Informe a nova senha" });
     }
 
     const { data, error } = await supabase
       .from("users")
       .update({
-        senha: senha,
+        senha,
         alterar_senha: false
       })
       .eq("id", id)
@@ -363,10 +339,7 @@ app.patch("/usuarios/:id/trocar-senha", async (req, res) => {
 
   } catch (error) {
     console.log(error.message);
-
-    res.status(500).json({
-      erro: "Erro ao trocar senha"
-    });
+    res.status(500).json({ erro: "Erro ao trocar senha" });
   }
 });
 
@@ -396,33 +369,27 @@ app.get("/funcionarios", async (req, res) => {
 
   } catch (error) {
     console.log(error.response?.data || error.message);
-
-    res.status(500).json({
-      erro: "Erro ao buscar funcionários"
-    });
+    res.status(500).json({ erro: "Erro ao buscar funcionários" });
   }
 });
 
 app.get("/banco-horas-equipe", async (req, res) => {
   try {
-    const { estrutura, dataInicio, dataFim } = req.query;
+    const { estrutura } = req.query;
 
-    if (!estrutura || !dataInicio) {
+    if (!estrutura) {
       return res.status(400).json({
-        erro: "Informe estrutura e dataInicio"
+        erro: "Informe estrutura"
       });
     }
 
-    const ontem = obterDataOntem();
-    let dataReferencia = dataFim || ontem;
-
-    if (dataReferencia >= hojeISO()) {
-      dataReferencia = ontem;
-    }
+    const dataReferencia = obterDataOntem();
+    const dataInicioCalculada = obterDataMenosDias(dataReferencia, 29);
 
     const estruturaNormalizada = normalizarTexto(estrutura);
     const estruturaLimpa = limparTexto(estrutura);
-    const chaveCache = `${estruturaNormalizada}-${dataInicio}-${dataReferencia}`;
+
+    const chaveCache = `${estruturaNormalizada}-${dataInicioCalculada}-${dataReferencia}`;
 
     if (cacheBancoHorasEquipe[chaveCache]) {
       console.log("Retornando banco de horas do CACHE");
@@ -472,7 +439,7 @@ app.get("/banco-horas-equipe", async (req, res) => {
           "https://pontowebintegracaoexterna.secullum.com.br/IntegracaoExterna/Calcular/SomenteTotais",
           {
             FuncionarioCpf: cpfLimpo,
-            DataInicial: dataInicio,
+            DataInicial: dataInicioCalculada,
             DataFinal: dataReferencia
           },
           {
@@ -514,9 +481,7 @@ app.get("/banco-horas-equipe", async (req, res) => {
 
         let total = (horas * 60) + minutos;
 
-        if (negativo) {
-          total = total * -1;
-        }
+        if (negativo) total *= -1;
 
         return total;
       };
@@ -524,21 +489,20 @@ app.get("/banco-horas-equipe", async (req, res) => {
       return converterMinutos(b.saldoBancoHoras) - converterMinutos(a.saldoBancoHoras);
     });
 
-    const positivos = resultado.filter(f => {
-      return (
-        f.saldoBancoHoras &&
-        !f.saldoBancoHoras.startsWith("-") &&
-        f.saldoBancoHoras !== "00:00"
-      );
-    });
+    const positivos = resultado.filter(f =>
+      f.saldoBancoHoras &&
+      !f.saldoBancoHoras.startsWith("-") &&
+      f.saldoBancoHoras !== "00:00"
+    );
 
-    const negativos = resultado.filter(f => {
-      return f.saldoBancoHoras && f.saldoBancoHoras.startsWith("-");
-    });
+    const negativos = resultado.filter(f =>
+      f.saldoBancoHoras &&
+      f.saldoBancoHoras.startsWith("-")
+    );
 
-    const zerados = resultado.filter(f => {
-      return !f.saldoBancoHoras || f.saldoBancoHoras === "00:00";
-    });
+    const zerados = resultado.filter(f =>
+      !f.saldoBancoHoras || f.saldoBancoHoras === "00:00"
+    );
 
     const maiorSaldo = positivos[0];
     const menorSaldo = negativos[negativos.length - 1];
@@ -554,7 +518,7 @@ app.get("/banco-horas-equipe", async (req, res) => {
 
     const resposta = {
       estrutura: estruturaLimpa,
-      dataInicio,
+      dataInicio: dataInicioCalculada,
       dataFim: dataReferencia,
       origem: "secullum",
       resumo,
@@ -578,18 +542,4 @@ app.get("/banco-horas-equipe", async (req, res) => {
 
 app.listen(3001, () => {
   console.log("Servidor rodando na porta 3001");
-});
-
-app.get("/token-secullum", async (req, res) => {
-  try {
-    const token = await obterTokenSecullum();
-
-    res.json({
-      token
-    });
-  } catch (error) {
-    res.status(500).json({
-      erro: error.message
-    });
-  }
 });
