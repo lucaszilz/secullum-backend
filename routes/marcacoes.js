@@ -213,6 +213,14 @@ router.get("/", async (req, res) => {
         String(item.Funcionario?.NumeroFolha) === String(numeroFolha)
       );
 
+      console.log(
+  JSON.stringify(
+    marcacoesFiltradas[0],
+    null,
+    2
+  )
+);
+
       resultado = marcacoesFiltradas.map(item => {
         return {
           numeroFolha: item.Funcionario?.NumeroFolha || numeroFolha,
