@@ -177,6 +177,20 @@ async function buscarSaldoDiaPorPeriodo({ funcionarioCpf, dataInicio, dataFim })
     }
   );
 
+console.log("====================================");
+console.log("RETORNO CALCULAR");
+console.log("CPF:", cpfLimpo);
+
+console.log(
+  JSON.stringify(
+    response.data,
+    null,
+    2
+  )
+);
+
+console.log("====================================");
+
   const colunas = response.data.Colunas || [];
   const linhas = response.data.Linhas || [];
 
