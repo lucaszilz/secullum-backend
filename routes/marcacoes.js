@@ -276,16 +276,15 @@ router.get("/", async (req, res) => {
       }
     }
 
-    return res.json({
-      periodo: {
-        dataInicio,
-        dataFim
-      },
-      incluirSaldoDia: String(incluirSaldoDia) === "true",
-      saldoPeriodo,
-      erroSaldoDia,
-      marcacoes: resultado
-    });
+    if (saldoPeriodo) {
+  res.setHeader("X-Saldo-Periodo", saldoPeriodo);
+}
+
+if (erroSaldoDia) {
+  res.setHeader("X-Erro-Saldo-Dia", encodeURIComponent(erroSaldoDia));
+}
+
+return res.json(resultado);
 
   } catch (error) {
     console.error(error.response?.data || error.message);
