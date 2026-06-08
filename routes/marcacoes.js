@@ -6,11 +6,6 @@ const router = express.Router();
 let secullumToken = null;
 
 const cacheMarcacoes = {};
-const cacheSaldoDia = {};
-const cacheFuncionarios = {
-  dados: null,
-  atualizadoEm: null
-};
 
 async function gerarTokenSecullum() {
   const params = new URLSearchParams();
@@ -32,7 +27,7 @@ async function gerarTokenSecullum() {
 
   secullumToken = response.data.access_token;
 
-  console.log("Token Secullum gerado automaticamente nas marcações");
+  console.log("Token Secullum gerado nas marcações");
 
   return secullumToken;
 }
@@ -45,193 +40,9 @@ async function obterTokenSecullum() {
   return secullumToken;
 }
 
-function diferencaDias(dataInicio, dataFim) {
-  const inicio = new Date(`${dataInicio}T00:00:00`);
-  const fim = new Date(`${dataFim}T00:00:00`);
-  const diffMs = fim - inicio;
-  return Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
-}
-
-function converterDataBRParaISO(dataBR) {
-  if (!dataBR) return null;
-
-  const somenteData = String(dataBR).split(" - ")[0];
-  const [dia, mes, ano] = somenteData.split("/");
-
-  if (!dia || !mes || !ano) return null;
-
-  return `${ano}-${mes}-${dia}`;
-}
-
-function converterSaldoParaMinutos(saldo) {
-  if (!saldo) return 0;
-
-  const texto = String(saldo).trim();
-
-  if (!texto || texto === "00:00") return 0;
-
-  const negativo = texto.startsWith("-");
-  const valorLimpo = texto.replace("+", "").replace("-", "");
-  const [horas, minutos] = valorLimpo.split(":").map(Number);
-
-  if (Number.isNaN(horas) || Number.isNaN(minutos)) return 0;
-
-  let total = (horas * 60) + minutos;
-
-  if (negativo) {
-    total *= -1;
-  }
-
-  return total;
-}
-
-function converterMinutosParaSaldo(totalMinutos) {
-  const negativo = totalMinutos < 0;
-  const absoluto = Math.abs(totalMinutos);
-
-  const horas = String(Math.floor(absoluto / 60)).padStart(2, "0");
-  const minutos = String(absoluto % 60).padStart(2, "0");
-
-  if (totalMinutos === 0) {
-    return "00:00";
-  }
-
-  return `${negativo ? "-" : "+"}${horas}:${minutos}`;
-}
-
-async function buscarFuncionarioPorNumeroFolha(numeroFolha) {
-  const agora = Date.now();
-  const cacheValidoPorMs = 10 * 60 * 1000;
-
-  if (
-    cacheFuncionarios.dados &&
-    cacheFuncionarios.atualizadoEm &&
-    agora - cacheFuncionarios.atualizadoEm < cacheValidoPorMs
-  ) {
-    console.log("Retornando funcionários do CACHE");
-  } else {
-    const response = await axios.get(process.env.SECULLUM_FUNCIONARIOS_URL, {
-      headers: {
-        Authorization: `Bearer ${await obterTokenSecullum()}`,
-        secullumidbancoselecionado: process.env.SECULLUM_BANCO_ID
-      }
-    });
-
-    cacheFuncionarios.dados = response.data || [];
-    cacheFuncionarios.atualizadoEm = agora;
-
-    console.log("Funcionários salvos no CACHE");
-  }
-
-  return cacheFuncionarios.dados.find(funcionario =>
-    String(funcionario.NumeroFolha) === String(numeroFolha)
-  );
-}
-
-async function buscarSaldoDiaPorPeriodo({ funcionarioCpf, dataInicio, dataFim }) {
-  const cpfLimpo = String(funcionarioCpf || "").replace(/\D/g, "");
-
-  if (!cpfLimpo) {
-    return {
-      saldosPorData: {},
-      saldoPeriodo: "00:00",
-      erro: "CPF não encontrado para cálculo de Saldo/Dia."
-    };
-  }
-
-  const chaveCache = `${cpfLimpo}-${dataInicio}-${dataFim}`;
-
-  if (cacheSaldoDia[chaveCache]) {
-    console.log("Retornando saldo do dia do CACHE");
-
-    return {
-      ...cacheSaldoDia[chaveCache],
-      origem: "cache"
-    };
-  }
-
-  const dias = diferencaDias(dataInicio, dataFim);
-
-  if (dias > 30) {
-    return {
-      saldosPorData: {},
-      saldoPeriodo: "00:00",
-      erro: "O Saldo/Dia só pode ser consultado em períodos de até 30 dias."
-    };
-  }
-
-  const response = await axios.post(
-    "https://pontowebintegracaoexterna.secullum.com.br/IntegracaoExterna/Calcular",
-    {
-      funcionarioCpf: cpfLimpo,
-      dataInicial: dataInicio,
-      dataFinal: dataFim,
-      centrosDeCustos: []
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${await obterTokenSecullum()}`,
-        secullumidbancoselecionado: process.env.SECULLUM_BANCO_ID,
-        "Content-Type": "application/json"
-      }
-    }
-  );
-
-console.log("====================================");
-console.log("RETORNO CALCULAR");
-console.log("CPF:", cpfLimpo);
-
-console.log(
-  JSON.stringify(
-    response.data,
-    null,
-    2
-  )
-);
-
-console.log("====================================");
-
-  const colunas = response.data.Colunas || [];
-  const linhas = response.data.Linhas || [];
-
-  const indiceBTotal = colunas.indexOf("BTotal");
-
-  const saldosPorData = {};
-  let saldoPeriodoMinutos = 0;
-
-  if (indiceBTotal >= 0) {
-    for (const linha of linhas) {
-      const dataISO = converterDataBRParaISO(linha.Value?.[0]);
-      const saldoDia = linha.Value?.[indiceBTotal] || "00:00";
-
-      if (dataISO) {
-        const saldoFormatado = saldoDia === "00:00"
-          ? "00:00"
-          : saldoDia.startsWith("-") || saldoDia.startsWith("+")
-            ? saldoDia
-            : `+${saldoDia}`;
-
-        saldosPorData[dataISO] = saldoFormatado;
-        saldoPeriodoMinutos += converterSaldoParaMinutos(saldoFormatado);
-      }
-    }
-  }
-
-  const resposta = {
-    saldosPorData,
-    saldoPeriodo: converterMinutosParaSaldo(saldoPeriodoMinutos)
-  };
-
-  cacheSaldoDia[chaveCache] = resposta;
-
-  console.log("Saldo do dia salvo no CACHE");
-
-  return resposta;
-}
-
 router.get("/", async (req, res) => {
   try {
-    const { numeroFolha, dataInicio, dataFim, incluirSaldoDia } = req.query;
+    const { numeroFolha, dataInicio, dataFim } = req.query;
 
     if (!numeroFolha || !dataInicio || !dataFim) {
       return res.status(400).json({
@@ -239,96 +50,52 @@ router.get("/", async (req, res) => {
       });
     }
 
-    const chaveCacheMarcacoes = `${numeroFolha}-${dataInicio}-${dataFim}`;
+    const chaveCache = `${numeroFolha}-${dataInicio}-${dataFim}`;
 
-    let resultado;
-
-    if (cacheMarcacoes[chaveCacheMarcacoes]) {
-      console.log("Retornando marcações do CACHE");
-      resultado = cacheMarcacoes[chaveCacheMarcacoes];
-    } else {
-      const response = await axios.get(process.env.SECULLUM_MARCACOES_URL, {
-        params: {
-          DataInicio: dataInicio,
-          DataFim: dataFim
-        },
-        headers: {
-          Authorization: `Bearer ${await obterTokenSecullum()}`,
-          secullumidbancoselecionado: process.env.SECULLUM_BANCO_ID
-        }
-      });
-
-      const marcacoesFiltradas = response.data.filter(item =>
-        String(item.Funcionario?.NumeroFolha) === String(numeroFolha)
-      );
-
-      resultado = marcacoesFiltradas.map(item => {
-        return {
-          numeroFolha: item.Funcionario?.NumeroFolha || numeroFolha,
-          data: item.Data?.split("T")[0],
-
-          entrada1: item.Entrada1 || "",
-          saida1: item.Saida1 || "",
-
-          entrada2: item.Entrada2 || "",
-          saida2: item.Saida2 || "",
-
-          entrada3: item.Entrada3 || "",
-          saida3: item.Saida3 || "",
-
-          observacoes: item.Observacoes || "",
-          saldoDia: ""
-        };
-      });
-
-      cacheMarcacoes[chaveCacheMarcacoes] = resultado;
-
-      console.log("Marcações salvas no CACHE");
+    if (cacheMarcacoes[chaveCache]) {
+      console.log("Marcações retornadas do cache");
+      return res.json(cacheMarcacoes[chaveCache]);
     }
 
-    let saldoPeriodo = null;
-    let erroSaldoDia = null;
-
-    if (String(incluirSaldoDia) === "true") {
-      const dias = diferencaDias(dataInicio, dataFim);
-
-      if (dias > 30) {
-        erroSaldoDia = "O Saldo/Dia só pode ser consultado em períodos de até 30 dias.";
-      } else {
-        const funcionario = await buscarFuncionarioPorNumeroFolha(numeroFolha);
-        const funcionarioCpf = funcionario?.Cpf || funcionario?.CPF || funcionario?.cpf || "";
-
-        const saldoDiaResponse = await buscarSaldoDiaPorPeriodo({
-          funcionarioCpf,
-          dataInicio,
-          dataFim
-        });
-
-        if (saldoDiaResponse.erro) {
-          erroSaldoDia = saldoDiaResponse.erro;
-        }
-
-        saldoPeriodo = saldoDiaResponse.saldoPeriodo;
-
-        resultado = resultado.map(item => ({
-          ...item,
-          saldoDia: saldoDiaResponse.saldosPorData?.[item.data] || "00:00"
-        }));
+    const response = await axios.get(process.env.SECULLUM_MARCACOES_URL, {
+      params: {
+        DataInicio: dataInicio,
+        DataFim: dataFim
+      },
+      headers: {
+        Authorization: `Bearer ${await obterTokenSecullum()}`,
+        secullumidbancoselecionado: process.env.SECULLUM_BANCO_ID
       }
-    }
+    });
 
-    if (saldoPeriodo) {
-      res.setHeader("X-Saldo-Periodo", saldoPeriodo);
-    }
+    const marcacoesFiltradas = response.data.filter(item =>
+      String(item.Funcionario?.NumeroFolha) === String(numeroFolha)
+    );
 
-    if (erroSaldoDia) {
-      res.setHeader("X-Erro-Saldo-Dia", encodeURIComponent(erroSaldoDia));
-    }
+    const resultado = marcacoesFiltradas.map(item => ({
+      numeroFolha: item.Funcionario?.NumeroFolha || numeroFolha,
+      data: item.Data?.split("T")[0],
+
+      entrada1: item.Entrada1 || "",
+      saida1: item.Saida1 || "",
+
+      entrada2: item.Entrada2 || "",
+      saida2: item.Saida2 || "",
+
+      entrada3: item.Entrada3 || "",
+      saida3: item.Saida3 || "",
+
+      observacoes: item.Observacoes || ""
+    }));
+
+    cacheMarcacoes[chaveCache] = resultado;
+
+    console.log(`Marcações salvas no cache: ${numeroFolha} | ${dataInicio} até ${dataFim}`);
 
     return res.json(resultado);
 
   } catch (error) {
-    console.error(error.response?.data || error.message);
+    console.error("Erro ao buscar marcações:", error.response?.data || error.message);
 
     return res.status(500).json({
       erro: "Erro ao buscar marcações"
