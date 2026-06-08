@@ -4,8 +4,13 @@ const axios = require("axios");
 const router = express.Router();
 
 let secullumToken = null;
+
 const cacheMarcacoes = {};
 const cacheSaldoDia = {};
+const cacheFuncionarios = {
+  dados: null,
+  atualizadoEm: null
+};
 
 async function gerarTokenSecullum() {
   const params = new URLSearchParams();
@@ -94,13 +99,43 @@ function converterMinutosParaSaldo(totalMinutos) {
   return `${negativo ? "-" : "+"}${horas}:${minutos}`;
 }
 
+async function buscarFuncionarioPorNumeroFolha(numeroFolha) {
+  const agora = Date.now();
+  const cacheValidoPorMs = 10 * 60 * 1000;
+
+  if (
+    cacheFuncionarios.dados &&
+    cacheFuncionarios.atualizadoEm &&
+    agora - cacheFuncionarios.atualizadoEm < cacheValidoPorMs
+  ) {
+    console.log("Retornando funcionários do CACHE");
+  } else {
+    const response = await axios.get(process.env.SECULLUM_FUNCIONARIOS_URL, {
+      headers: {
+        Authorization: `Bearer ${await obterTokenSecullum()}`,
+        secullumidbancoselecionado: process.env.SECULLUM_BANCO_ID
+      }
+    });
+
+    cacheFuncionarios.dados = response.data || [];
+    cacheFuncionarios.atualizadoEm = agora;
+
+    console.log("Funcionários salvos no CACHE");
+  }
+
+  return cacheFuncionarios.dados.find(funcionario =>
+    String(funcionario.NumeroFolha) === String(numeroFolha)
+  );
+}
+
 async function buscarSaldoDiaPorPeriodo({ funcionarioCpf, dataInicio, dataFim }) {
   const cpfLimpo = String(funcionarioCpf || "").replace(/\D/g, "");
 
   if (!cpfLimpo) {
     return {
       saldosPorData: {},
-      saldoPeriodo: "00:00"
+      saldoPeriodo: "00:00",
+      erro: "CPF não encontrado para cálculo de Saldo/Dia."
     };
   }
 
@@ -213,18 +248,9 @@ router.get("/", async (req, res) => {
         String(item.Funcionario?.NumeroFolha) === String(numeroFolha)
       );
 
-      console.log(
-  JSON.stringify(
-    marcacoesFiltradas[0],
-    null,
-    2
-  )
-);
-
       resultado = marcacoesFiltradas.map(item => {
         return {
           numeroFolha: item.Funcionario?.NumeroFolha || numeroFolha,
-          cpf: item.Funcionario?.Cpf || "",
           data: item.Data?.split("T")[0],
 
           entrada1: item.Entrada1 || "",
@@ -255,7 +281,8 @@ router.get("/", async (req, res) => {
       if (dias > 30) {
         erroSaldoDia = "O Saldo/Dia só pode ser consultado em períodos de até 30 dias.";
       } else {
-        const funcionarioCpf = resultado.find(item => item.cpf)?.cpf;
+        const funcionario = await buscarFuncionarioPorNumeroFolha(numeroFolha);
+        const funcionarioCpf = funcionario?.Cpf || funcionario?.CPF || funcionario?.cpf || "";
 
         const saldoDiaResponse = await buscarSaldoDiaPorPeriodo({
           funcionarioCpf,
@@ -277,14 +304,14 @@ router.get("/", async (req, res) => {
     }
 
     if (saldoPeriodo) {
-  res.setHeader("X-Saldo-Periodo", saldoPeriodo);
-}
+      res.setHeader("X-Saldo-Periodo", saldoPeriodo);
+    }
 
-if (erroSaldoDia) {
-  res.setHeader("X-Erro-Saldo-Dia", encodeURIComponent(erroSaldoDia));
-}
+    if (erroSaldoDia) {
+      res.setHeader("X-Erro-Saldo-Dia", encodeURIComponent(erroSaldoDia));
+    }
 
-return res.json(resultado);
+    return res.json(resultado);
 
   } catch (error) {
     console.error(error.response?.data || error.message);
