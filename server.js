@@ -3,14 +3,20 @@ require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
-const { createClient } = require("@supabase/supabase-js");
+const { Pool } = require("pg");
 
 let secullumToken = null;
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
-);
+const pool = new Pool({
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT || 5432,
+  database: process.env.DB_NAME,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  ssl: { rejectUnauthorized: false }
+});
+
+const TABELA_USUARIOS = "ottimizza_schema.visao_gestor_usuarios";
 
 const cacheBancoHorasEquipe = {};
 
@@ -92,15 +98,16 @@ app.post("/login", async (req, res) => {
       return res.status(400).json({ erro: "Informe login e senha" });
     }
 
-    const { data, error } = await supabase
-      .from("users")
-      .select("id, nome, login, tipo, estrutura, alterar_senha")
-      .eq("login", login)
-      .eq("senha", senha)
-      .limit(1)
-      .maybeSingle();
+    const { rows } = await pool.query(
+      `SELECT id, nome, login, tipo, estrutura, alterar_senha
+       FROM ${TABELA_USUARIOS}
+       WHERE login = $1 AND senha = $2
+       LIMIT 1`,
+      [login, senha]
+    );
+    const data = rows[0];
 
-    if (error || !data) {
+    if (!data) {
       return res.status(401).json({ erro: "Login ou senha inválidos" });
     }
 
@@ -123,19 +130,13 @@ app.post("/login", async (req, res) => {
 
 app.get("/usuarios", async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from("users")
-      .select("id, nome, login, tipo, estrutura, alterar_senha")
-      .order("id", { ascending: true });
+    const { rows } = await pool.query(
+      `SELECT id, nome, login, tipo, estrutura, alterar_senha
+       FROM ${TABELA_USUARIOS}
+       ORDER BY id ASC`
+    );
 
-    if (error) {
-      return res.status(500).json({
-        erro: "Erro ao buscar usuários",
-        detalhe: error.message
-      });
-    }
-
-    res.json(data);
+    res.json(rows);
 
   } catch (error) {
     console.log(error.message);
@@ -153,49 +154,32 @@ app.post("/usuarios", async (req, res) => {
       });
     }
 
-    const { data: existente } = await supabase
-      .from("users")
-      .select("id")
-      .eq("login", login)
-      .maybeSingle();
+    const { rows: existenteRows } = await pool.query(
+      `SELECT id FROM ${TABELA_USUARIOS} WHERE login = $1 LIMIT 1`,
+      [login]
+    );
 
-    if (existente) {
+    if (existenteRows[0]) {
       return res.status(409).json({
         erro: "Já existe um usuário com este login"
       });
     }
 
-    const { data: ultimoUsuario } = await supabase
-      .from("users")
-      .select("id")
-      .order("id", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const { rows } = await pool.query(
+      `INSERT INTO ${TABELA_USUARIOS}
+        (nome, login, senha, tipo, estrutura, alterar_senha)
+       VALUES ($1, $2, $3, $4, $5, true)
+       RETURNING id, nome, login, tipo, estrutura, alterar_senha`,
+      [
+        limparTexto(nome),
+        limparTexto(login).toLowerCase(),
+        "ottimizza123",
+        limparTexto(tipo).toLowerCase(),
+        limparTexto(estrutura)
+      ]
+    );
 
-    const novoId = (ultimoUsuario?.id || 0) + 1;
-
-    const { data, error } = await supabase
-      .from("users")
-      .insert({
-        id: novoId,
-        nome: limparTexto(nome),
-        login: limparTexto(login).toLowerCase(),
-        senha: "ottimizza123",
-        tipo: limparTexto(tipo).toLowerCase(),
-        estrutura: limparTexto(estrutura),
-        alterar_senha: true
-      })
-      .select("id, nome, login, tipo, estrutura, alterar_senha")
-      .single();
-
-    if (error) {
-      return res.status(500).json({
-        erro: "Erro ao criar usuário",
-        detalhe: error.message
-      });
-    }
-
-    res.status(201).json(data);
+    res.status(201).json(rows[0]);
 
   } catch (error) {
     console.log(error.message);
@@ -214,26 +198,25 @@ app.put("/usuarios/:id", async (req, res) => {
       });
     }
 
-    const { data, error } = await supabase
-      .from("users")
-      .update({
-        nome: limparTexto(nome),
-        login: limparTexto(login).toLowerCase(),
-        tipo: limparTexto(tipo).toLowerCase(),
-        estrutura: limparTexto(estrutura)
-      })
-      .eq("id", id)
-      .select("id, nome, login, tipo, estrutura, alterar_senha")
-      .single();
+    const { rows } = await pool.query(
+      `UPDATE ${TABELA_USUARIOS}
+       SET nome = $1, login = $2, tipo = $3, estrutura = $4
+       WHERE id = $5
+       RETURNING id, nome, login, tipo, estrutura, alterar_senha`,
+      [
+        limparTexto(nome),
+        limparTexto(login).toLowerCase(),
+        limparTexto(tipo).toLowerCase(),
+        limparTexto(estrutura),
+        id
+      ]
+    );
 
-    if (error) {
-      return res.status(500).json({
-        erro: "Erro ao editar usuário",
-        detalhe: error.message
-      });
+    if (!rows[0]) {
+      return res.status(404).json({ erro: "Usuário não encontrado" });
     }
 
-    res.json(data);
+    res.json(rows[0]);
 
   } catch (error) {
     console.log(error.message);
@@ -251,17 +234,7 @@ app.delete("/usuarios/:id", async (req, res) => {
       });
     }
 
-    const { error } = await supabase
-      .from("users")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      return res.status(500).json({
-        erro: "Erro ao excluir usuário",
-        detalhe: error.message
-      });
-    }
+    await pool.query(`DELETE FROM ${TABELA_USUARIOS} WHERE id = $1`, [id]);
 
     res.json({ mensagem: "Usuário excluído com sucesso" });
 
@@ -275,24 +248,19 @@ app.patch("/usuarios/:id/senha", async (req, res) => {
   try {
     const { id } = req.params;
 
-    const { data, error } = await supabase
-      .from("users")
-      .update({
-        senha: "ottimizza123",
-        alterar_senha: true
-      })
-      .eq("id", id)
-      .select("id, nome, login, tipo, estrutura, alterar_senha")
-      .single();
+    const { rows } = await pool.query(
+      `UPDATE ${TABELA_USUARIOS}
+       SET senha = $1, alterar_senha = true
+       WHERE id = $2
+       RETURNING id, nome, login, tipo, estrutura, alterar_senha`,
+      ["ottimizza123", id]
+    );
 
-    if (error) {
-      return res.status(500).json({
-        erro: "Erro ao redefinir senha",
-        detalhe: error.message
-      });
+    if (!rows[0]) {
+      return res.status(404).json({ erro: "Usuário não encontrado" });
     }
 
-    res.json(data);
+    res.json(rows[0]);
 
   } catch (error) {
     console.log(error.message);
@@ -309,21 +277,18 @@ app.patch("/usuarios/:id/trocar-senha", async (req, res) => {
       return res.status(400).json({ erro: "Informe a nova senha" });
     }
 
-    const { data, error } = await supabase
-      .from("users")
-      .update({
-        senha,
-        alterar_senha: false
-      })
-      .eq("id", id)
-      .select("id, nome, login, tipo, estrutura, alterar_senha")
-      .single();
+    const { rows } = await pool.query(
+      `UPDATE ${TABELA_USUARIOS}
+       SET senha = $1, alterar_senha = false
+       WHERE id = $2
+       RETURNING id, nome, login, tipo, estrutura, alterar_senha`,
+      [senha, id]
+    );
 
-    if (error) {
-      return res.status(500).json({
-        erro: "Erro ao trocar senha",
-        detalhe: error.message
-      });
+    const data = rows[0];
+
+    if (!data) {
+      return res.status(404).json({ erro: "Usuário não encontrado" });
     }
 
     res.json({
